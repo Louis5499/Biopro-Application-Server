@@ -1,3 +1,9 @@
 node_modules
 
 package-lock.json
+
+.gcloudignore
+
+dump.rdb
+
+.DS_Store

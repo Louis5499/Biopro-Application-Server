@@ -18,6 +18,7 @@
 // [START gae_node_request_example]
 const express = require('express');
 const app = express();
+const bodyParser = require('body-parser');
 
 // firebase
 const admin = require('firebase-admin');
@@ -27,6 +28,7 @@ const serviceAccount = require("./nthu-a-plus-2019-firebase-adminsdk-0efmt-0a306
 const crypto = require('crypto');
 const shasum = crypto.createHash('sha1');
 const nodemailer = require('nodemailer');
+app.use(bodyParser.json()); // for parsing application/json
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -169,6 +171,26 @@ app.get('/', (req, res) => {
     .status(200)
     .send('Hello, world!')
     .end();
+});
+
+app.post('/loginReviewSystem', async (req, res) => {
+  const { email, password } = req.body;
+
+  const reviewSystemRef = db.ref('reviewUsers');
+  const snapshot = await reviewSystemRef.once('value');
+  const reviewUsers = snapshot.val();
+
+  let is_correct = false;
+  let topic_index = null;
+  for (const perUserKey in reviewUsers) {
+    const reviewUser = reviewUsers[perUserKey];
+    if (reviewUser.email === email && reviewUser.password === password) {
+      is_correct = true;
+      topic_index = reviewUser.topicIndex;
+      break;
+    }
+  }
+  res.json({ is_correct, topic_index });
 });
 
 // Start the server
