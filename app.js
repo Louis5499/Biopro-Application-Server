@@ -23,12 +23,14 @@ const bodyParser = require('body-parser');
 // firebase
 const admin = require('firebase-admin');
 const serviceAccount = require("./nthu-a-plus-2019-firebase-adminsdk-0efmt-0a3066b278.json");
+const cors = require('cors');
 
 // Library
 const crypto = require('crypto');
 const shasum = crypto.createHash('sha1');
 const nodemailer = require('nodemailer');
 app.use(bodyParser.json()); // for parsing application/json
+app.use(cors());
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -177,20 +179,35 @@ app.post('/loginReviewSystem', async (req, res) => {
   const { email, password } = req.body;
 
   const reviewSystemRef = db.ref('reviewUsers');
-  const snapshot = await reviewSystemRef.once('value');
+  let snapshot = await reviewSystemRef.once('value');
   const reviewUsers = snapshot.val();
+
+  const topicRef = db.ref('miscs/topics');
+  snapshot = await topicRef.once('value');
+  const topicData = snapshot.val();
 
   let is_correct = false;
   let topic_index = null;
+  let topic_name = '';
   for (const perUserKey in reviewUsers) {
     const reviewUser = reviewUsers[perUserKey];
     if (reviewUser.email === email && reviewUser.password === password) {
       is_correct = true;
       topic_index = reviewUser.topicIndex;
+      topic_name = topicData[topic_index];
       break;
     }
   }
-  res.json({ is_correct, topic_index });
+  res.json({ is_correct, topic_index, topic_name });
+});
+
+app.post('/giveScore', async (req, res) => {
+  const { form_key, user_key, score_list } = req.body;
+
+  await ref.child(user_key).child('forms').child(form_key).child('reviewScore').set(score_list);
+  await ref.child(user_key).child('forms').child(form_key).child('reviewFinished').set(true);
+
+  res.json({ is_success: true });
 });
 
 // Start the server
