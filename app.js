@@ -53,6 +53,43 @@ var getSHA1ofJSON = function(input){
   return crypto.createHash('sha1').update(input).digest('hex')
 }
 
+// 補齊 未完全建立資料的 referee 資訊，讓 referee 可以上網上傳推薦信
+ref.once('value').then(userSnapshot => {
+  const userMaps = userSnapshot.val();
+  const recommPeople = [];
+  for (const perUserKey in userMaps) {
+    if (userMaps[perUserKey].forms) {
+      for (const perFormKey in userMaps[perUserKey].forms) {
+        const formData = userMaps[perUserKey].forms[perFormKey];
+        if (formData.recommPeople) {
+          let i=0;
+          for (const perRecommPeople of formData.recommPeople) {
+            if (!perRecommPeople.recommRepoHash && perRecommPeople.email !== '' && perRecommPeople.email.indexOf('zdf') === -1 && perRecommPeople.email.indexOf('louis') === -1) {
+              recommPeople.push({ userKey: perUserKey, formKey: perFormKey, refereeEmail: perRecommPeople.email, email: formData.email, name: formData.engName, i });
+            }
+            i++;
+          }
+          i=0;
+        }
+      }
+    }
+  }
+
+  for (const preFetchUser of recommPeople) {
+    const { refereeEmail, userKey, formKey, email, name, i } = preFetchUser;
+    const recmndRepoHash = getSHA1ofJSON(`${refereeEmail}${formKey}`);
+    const recmndRepoRef = db.ref('recomms');
+    const recmndRepoItemRef = recmndRepoRef.child(recmndRepoHash);
+    recmndRepoItemRef.child('refereeEmail').set(refereeEmail);
+    recmndRepoItemRef.child('email').set(email);
+    recmndRepoItemRef.child('name').set(name);
+
+    ref.child(userKey).child('forms').child(formKey).child('recommPeople').child(i).child('recommRepoHash').set(recmndRepoHash);
+
+  }
+  console.log(recommPeople);
+});
+
 const topicProcess = (newFormSnapshot) => {
    // 1. topic process
    const topicIndexFieldSnapshot = newFormSnapshot.child('topicIndex');
@@ -125,8 +162,9 @@ const recommendProcess = (newFormSnapshot) => {
 
 ref.on('child_added', function(newUser, prevChildKey) {
   newUser.ref.child('forms').on('child_added', function(newFormSnapshot, prevChildKey) {
-    topicProcess(newFormSnapshot);
-    recommendProcess(newFormSnapshot);
+    // 申請已結束，不操作
+    // topicProcess(newFormSnapshot);
+    // recommendProcess(newFormSnapshot);
   });
 });
 
@@ -175,6 +213,8 @@ app.get('/', (req, res) => {
     .end();
 });
 
+
+// 以下兩個皆是 review system 2019 的 API
 app.post('/loginReviewSystem', async (req, res) => {
   const { email, password } = req.body;
 
@@ -204,8 +244,27 @@ app.post('/loginReviewSystem', async (req, res) => {
 app.post('/giveScore', async (req, res) => {
   const { form_key, user_key, score_list } = req.body;
 
-  await ref.child(user_key).child('forms').child(form_key).child('reviewScore').set(score_list);
-  await ref.child(user_key).child('forms').child(form_key).child('reviewFinished').set(true);
+  const userFormRef = ref.child(user_key).child('forms').child(form_key);
+
+  const newSetProcess = async() => {
+    await userFormRef.child('reviewScore').push(score_list);
+  }
+  const userFormSnapshot = await userFormRef.once('value');
+  if (userFormSnapshot.hasChild('reviewScore')) {
+    const reviewScoreRef = userFormRef.child('reviewScore');
+    const reviewScoresSnapshot = await reviewScoreRef.once('value');
+    const reviewScores = reviewScoresSnapshot.val();
+    let isExist = false;
+    for (const perReviewScoreKey in reviewScores) {
+      if (reviewScores[perReviewScoreKey].issuerEmail === score_list.issuerEmail) {
+        await userFormRef.child('reviewScore').child(perReviewScoreKey).set(score_list);
+        isExist = true;
+      }
+    }
+    if (!isExist) await newSetProcess();
+  } else {
+    await newSetProcess();
+  }
 
   res.json({ is_success: true });
 });

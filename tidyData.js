@@ -1,3 +1,5 @@
+/** 產生統整 csv 資料 */
+
 'use strict';
 
 const express = require('express');
@@ -38,6 +40,7 @@ async function main() {
     if(!fetchedForms) continue;
     for (const perFormKey in fetchedForms) {
       const fetchedForm = fetchedForms[perFormKey];
+      if (fetchedForm.isTest) continue;
       for (const perRecommKey in fetchedForm.recommPeople) {
         const fetchedRecomm = fetchedForm.recommPeople[perRecommKey];
         const { recommRepoHash = null } = fetchedRecomm;
@@ -75,16 +78,13 @@ async function main() {
   stream += '\n';
 
   for (const perData of forms) {
-    let i = 0;
-    for (const perKey in perData) {
-      if (dataKeys[i] !== perKey) {
-        stream += ','
-      } else {
+    for (const perKey of dataKeys) {
+      if (perData[perKey]) {
         stream += `"${perData[perKey]}",`;
+      } else {
+        stream += ',';
       }
-      i++;
     }
-    i = 0;
     stream = stream.slice(0, stream.length - 1);
     stream += '\n';
   }
